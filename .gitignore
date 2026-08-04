@@ -29,9 +29,6 @@ data/*
 model/*
 !model/.gitkeep
 
-tokenizer/*
-!tokenizer/.gitkeep
-
 # 临时合并文件
 acl_raw_merged.txt
 *.jsonl
