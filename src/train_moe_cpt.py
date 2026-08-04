@@ -28,8 +28,6 @@ DATA_PATH = PROJECT_ROOT / "data" / "processed" / "all_chunks.jsonl"
 CKPT_DIR = PROJECT_ROOT / "model"
 CKPT_DIR.mkdir(exist_ok=True)
 
-RESUME_PATH = CKPT_DIR / "act2-moe-latest.pt"
-
 BATCH_SIZE = 16
 LR = 1e-4
 EPOCHS = 2
@@ -100,16 +98,30 @@ def main():
                                     betas=(0.9, 0.95), weight_decay=0.01)
     criterion = nn.CrossEntropyLoss()
 
+    # MoE CPT 自动 resume
+    cpt_ckpt = CKPT_DIR / "act2-moe-cpt-latest.pt"
+    pretrain_ckpt = CKPT_DIR / "act2-moe-latest.pt"
     start_epoch, step = 0, 0
     best_loss = float('inf')
 
-    if not RESUME_PATH.exists():
-        raise FileNotFoundError(f"resume checkpoint not found: {RESUME_PATH}\n请先跑完 python src/train_moe.py")
-    ckpt = torch.load(RESUME_PATH, map_location=device)
-    model.load_state_dict(ckpt["model_state_dict"])
-    step = ckpt.get("step", 0)
-    start_epoch = ckpt.get("epoch", 0)
-    print(f"resumed from {RESUME_PATH} (pretrained step={step}, epoch={start_epoch})")
+    if cpt_ckpt.exists():
+        ckpt = torch.load(cpt_ckpt, map_location=device)
+        model.load_state_dict(ckpt["model_state_dict"])
+        optimizer.load_state_dict(ckpt["optimizer_state_dict"])
+        step = ckpt.get("step", 0)
+        start_epoch = ckpt.get("epoch", 0)
+        best_loss = ckpt.get("loss", float('inf'))
+        print(f"[resume] MoE-CPT interrupted, loaded {cpt_ckpt} (step={step}, epoch={start_epoch})")
+    elif pretrain_ckpt.exists():
+        ckpt = torch.load(pretrain_ckpt, map_location=device)
+        model.load_state_dict(ckpt["model_state_dict"])
+        step = ckpt.get("step", 0)
+        start_epoch = ckpt.get("epoch", 0)
+        print(f"[resume] MoE-Pretrain → MoE-CPT, loaded {pretrain_ckpt}")
+        step = 0
+        start_epoch = 0
+    else:
+        raise FileNotFoundError(f"MoE 预训练权重不存在: {pretrain_ckpt}\n请先跑 python src/train_moe.py")
 
     total_steps = len(loader) * EPOCHS
     model.train()

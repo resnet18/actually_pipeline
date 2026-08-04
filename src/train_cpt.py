@@ -29,9 +29,6 @@ DATA_PATH = PROJECT_ROOT / "data" / "processed" / "all_chunks.jsonl"
 CKPT_DIR = PROJECT_ROOT / "model"
 CKPT_DIR.mkdir(exist_ok=True)
 
-# CPT 专用：从预训练权重恢复
-RESUME_PATH = CKPT_DIR / "act2-latest.pt"
-
 BATCH_SIZE = 16
 LR = 1e-4          # CPT 学习率 = 预训练的 1/5
 EPOCHS = 2
@@ -104,18 +101,30 @@ def main():
                                     betas=(0.9, 0.95), weight_decay=0.01)
     criterion = nn.CrossEntropyLoss()
 
+    # CPT 自动 resume：先找 CPT 中断，再找预训练权重
+    cpt_ckpt = CKPT_DIR / "act2-cpt-latest.pt"
+    pretrain_ckpt = CKPT_DIR / "act2-latest.pt"
     start_epoch, step = 0, 0
     best_loss = float('inf')
 
-    # 加载预训练权重
-    if not RESUME_PATH.exists():
-        raise FileNotFoundError(f"resume checkpoint not found: {RESUME_PATH}\n请先跑完 python src/train.py")
-    ckpt = torch.load(RESUME_PATH, map_location=device)
-    model.load_state_dict(ckpt["model_state_dict"])
-    # 不加载 optimizer 状态（CPT 新优化器）
-    step = ckpt.get("step", 0)
-    start_epoch = ckpt.get("epoch", 0)
-    print(f"resumed from {RESUME_PATH} (pretrained step={step}, epoch={start_epoch})")
+    if cpt_ckpt.exists():
+        ckpt = torch.load(cpt_ckpt, map_location=device)
+        model.load_state_dict(ckpt["model_state_dict"])
+        optimizer.load_state_dict(ckpt["optimizer_state_dict"])
+        step = ckpt.get("step", 0)
+        start_epoch = ckpt.get("epoch", 0)
+        best_loss = ckpt.get("loss", float('inf'))
+        print(f"[resume] CPT interrupted, loaded {cpt_ckpt} (step={step}, epoch={start_epoch})")
+    elif pretrain_ckpt.exists():
+        ckpt = torch.load(pretrain_ckpt, map_location=device)
+        model.load_state_dict(ckpt["model_state_dict"])
+        step = ckpt.get("step", 0)
+        start_epoch = ckpt.get("epoch", 0)
+        print(f"[resume] Pretrain → CPT, loaded {pretrain_ckpt} (pretrain step={step})")
+        step = 0  # CPT 阶段重新计数
+        start_epoch = 0
+    else:
+        raise FileNotFoundError(f"预训练权重不存在: {pretrain_ckpt}\n请先跑 python src/train.py")
 
     total_steps = len(loader) * EPOCHS
     model.train()

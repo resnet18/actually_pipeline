@@ -98,8 +98,17 @@ def main():
                                     betas=(0.9, 0.95), weight_decay=0.01)
     criterion = nn.CrossEntropyLoss()
 
+    ckpt_path = CKPT_DIR / "act2-moe-latest.pt"
     start_epoch, step = 0, 0
     best_loss = float('inf')
+    if ckpt_path.exists():
+        ckpt = torch.load(ckpt_path, map_location=device)
+        model.load_state_dict(ckpt["model_state_dict"])
+        optimizer.load_state_dict(ckpt["optimizer_state_dict"])
+        step = ckpt.get("step", 0)
+        start_epoch = ckpt.get("epoch", 0)
+        best_loss = ckpt.get("loss", float('inf'))
+        print(f"[resume] loaded {ckpt_path} (step={step}, epoch={start_epoch})")
 
     total_steps = len(loader) * EPOCHS
     model.train()
