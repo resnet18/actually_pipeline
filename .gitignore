@@ -1,0 +1,62 @@
+# ==========================================
+# Actually Pipeline - Git Ignore
+# ==========================================
+
+# --- Python Artifacts ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+*.whl
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.log
+
+# --- Virtual Environment ---
+venv/
+.env
+.venv
+env/
+ENV/
+
+# --- Data & Generated Outputs ---
+# 忽略目录下所有内容，但保留目录结构（.gitkeep）
+data/*
+!data/.gitkeep
+
+model/*
+!model/.gitkeep
+
+tokenizer/*
+!tokenizer/.gitkeep
+
+# 临时合并文件
+acl_raw_merged.txt
+*.jsonl
+
+# --- Archives & Downloads ---
+*.zip
+*.tar.gz
+*.tar
+*.pdf
+*.7z
+
+# --- OS & IDE ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# --- Misc ---
+tmp/
+temp/
+.cache/
+
+# fasttext cache
+*.ftz
+lid.176.ftz
