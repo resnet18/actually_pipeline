@@ -13,7 +13,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.normpath(os.path.join(SCRIPT_DIR, ".."))
 
 # 清洗脚本的最终输出（每行一个 {"text": "..."}）
-RAW_JSONL = os.path.join(PROJECT_ROOT, "data", "cc2026_skeleton", "cc2026_skeleton.jsonl")
+RAW_JSONL = os.path.join(PROJECT_ROOT, "data", "merged_corpus.jsonl")
 # 合并后的临时大文本（SPM 训练需要单文件输入）
 MERGED_TEXT_PATH = os.path.join(PROJECT_ROOT, "data", "cc_raw_merged.txt")
 # 输出前缀

@@ -10,12 +10,12 @@ import sentencepiece as spm
 from model import act2, default_config
 
 # ==================== 配置（直接改这里） ====================
-CHECKPOINT = Path(__file__).parent.parent / "model" / "act2-best.pt"
+CHECKPOINT = Path(__file__).parent.parent / "model" / "act2-cpt-epoch2.pt"
 TOKENIZER = Path(__file__).parent.parent / "tokenizer" / "act.model"
 
 MAX_NEW = 64
-TEMPERATURE = 1.0
-TOP_K = 10
+TEMPERATURE = 0.7
+TOP_K = 20
 # ===========================================================
 
 
@@ -29,13 +29,22 @@ def load_model(checkpoint_path, device):
     return model, cfg
 
 
-def generate(model, tokenizer, prompt, max_new=64, temperature=1.0, top_k=10):
+def generate(model, tokenizer, prompt, max_new=64, temperature=0.7, top_k=20):
     ids = tokenizer.encode(prompt, out_type=int)
     input_ids = torch.tensor([ids], dtype=torch.long, device=next(model.parameters()).device)
+
+    # 获取特殊 token id（保险起见）
+    pad_id = tokenizer.pad_id() if tokenizer.pad_id() > 0 else 0
+    unk_id = tokenizer.unk_id() if tokenizer.unk_id() > 0 else 2
+    eos_id = tokenizer.eos_id()
 
     with torch.no_grad():
         for _ in range(max_new):
             logits = model(input_ids)[:, -1, :] / temperature
+
+            # 屏蔽特殊 token：禁止生成 pad 和 unk
+            logits[:, pad_id] = float('-inf')
+            logits[:, unk_id] = float('-inf')
 
             if top_k > 0:
                 v, _ = torch.topk(logits, min(top_k, logits.size(-1)))
@@ -44,7 +53,7 @@ def generate(model, tokenizer, prompt, max_new=64, temperature=1.0, top_k=10):
             probs = torch.softmax(logits, dim=-1)
             next_id = torch.multinomial(probs, num_samples=1)
 
-            if next_id.item() == tokenizer.eos_id():
+            if next_id.item() == eos_id:
                 break
 
             input_ids = torch.cat([input_ids, next_id], dim=1)

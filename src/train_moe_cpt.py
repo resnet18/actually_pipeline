@@ -41,22 +41,31 @@ class token_dataset(Dataset):
         self.max_len = max_len
         self.tokenizer = tokenizer
         self.eos_id = tokenizer.eos_id()
+        self.unk_id = tokenizer.unk_id()  # 获取 unk id
 
         all_ids = []
+        skipped = 0
         with open(jsonl_path, "r", encoding="utf-8") as f:
             for line in f:
                 text = json.loads(line).get("text", "")
                 if not text:
                     continue
-                all_ids.extend(tokenizer.encode(text, out_type=int))
+                ids = tokenizer.encode(text, out_type=int)
+                
+                # 过滤含 unk 的样本（核心修复）
+                if self.unk_id in ids:
+                    skipped += 1
+                    continue
+                
+                all_ids.extend(ids)
                 all_ids.append(self.eos_id)
-
-        self.samples = []
+        
+                self.samples = []
         stride = max_len
         for i in range(0, len(all_ids) - max_len - 1, stride):
             self.samples.append(all_ids[i : i + max_len + 1])
 
-        print(f"dataset: {len(self.samples)} blocks (max_len={max_len})")
+        print(f"dataset: {len(self.samples)} blocks, skipped {skipped} unk samples")
 
     def __len__(self):
         return len(self.samples)

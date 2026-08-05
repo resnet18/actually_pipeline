@@ -42,22 +42,31 @@ class token_dataset(Dataset):
         self.max_len = max_len
         self.tokenizer = tokenizer
         self.eos_id = tokenizer.eos_id()
+        self.unk_id = tokenizer.unk_id()  # 获取 unk id
 
         all_ids = []
+        skipped = 0
         with open(jsonl_path, "r", encoding="utf-8") as f:
             for line in f:
                 text = json.loads(line).get("text", "")
                 if not text:
                     continue
-                all_ids.extend(tokenizer.encode(text, out_type=int))
+                ids = tokenizer.encode(text, out_type=int)
+                
+                # 过滤含 unk 的样本（核心修复）
+                if self.unk_id in ids:
+                    skipped += 1
+                    continue
+                
+                all_ids.extend(ids)
                 all_ids.append(self.eos_id)
-
-        self.samples = []
+        
+                self.samples = []
         stride = max_len
         for i in range(0, len(all_ids) - max_len - 1, stride):
             self.samples.append(all_ids[i : i + max_len + 1])
 
-        print(f"dataset: {len(self.samples)} blocks (max_len={max_len})")
+        print(f"dataset: {len(self.samples)} blocks, skipped {skipped} unk samples")
 
     def __len__(self):
         return len(self.samples)
@@ -103,20 +112,30 @@ def main():
                                     betas=(0.9, 0.95), weight_decay=0.01)
     criterion = nn.CrossEntropyLoss()
 
-    # 自动 resume
+    total_steps = len(loader) * EPOCHS
+
+    # 自动 resume（带旧 checkpoint 污染检测）
     ckpt_path = CKPT_DIR / "act2-latest.pt"
     start_epoch, step = 0, 0
     best_loss = float('inf')
     if ckpt_path.exists():
         ckpt = torch.load(ckpt_path, map_location=device)
-        model.load_state_dict(ckpt["model_state_dict"])
-        optimizer.load_state_dict(ckpt["optimizer_state_dict"])
-        step = ckpt.get("step", 0)
-        start_epoch = ckpt.get("epoch", 0)
-        best_loss = ckpt.get("loss", float('inf'))
-        print(f"[resume] loaded {ckpt_path} (step={step}, epoch={start_epoch})")
+        ckpt_step = ckpt.get("step", 0)
+        
+        # 防御性检查：旧 checkpoint 污染（不同数据/tokenizer 训的）
+        if ckpt_step > total_steps * 2:
+            bak = ckpt_path.with_suffix(".pt.bak")
+            ckpt_path.rename(bak)
+            print(f"[WARNING] 检测到旧 checkpoint (step={ckpt_step} >> 理论总步数={total_steps})")
+            print(f"已自动重命名为 {bak.name}，将从头训练。")
+        else:
+            model.load_state_dict(ckpt["model_state_dict"])
+            optimizer.load_state_dict(ckpt["optimizer_state_dict"])
+            step = ckpt_step
+            start_epoch = ckpt.get("epoch", 0)
+            best_loss = ckpt.get("loss", float('inf'))
+            print(f"[resume] loaded {ckpt_path} (step={step}, epoch={start_epoch})")
 
-    total_steps = len(loader) * EPOCHS
     model.train()
 
     try:
